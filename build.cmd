@@ -37,6 +37,7 @@ echo FILE3="install.ps1"
 echo FILE4="install-silent.ps1"
 echo FILE5="install.cmd"
 echo FILE6="uninstall.ps1"
+echo FILE7="setup.ps1"
 echo [SourceFiles]
 echo SourceFiles0=%SRC%
 echo [SourceFiles0]
@@ -47,6 +48,7 @@ echo %%FILE3%%=
 echo %%FILE4%%=
 echo %%FILE5%%=
 echo %%FILE6%%=
+echo %%FILE7%%=
 ) > "%SED%"
 
 iexpress /N /Q "%SED%"
