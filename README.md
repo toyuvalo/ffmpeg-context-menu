@@ -2,6 +2,8 @@
 
 Windows right-click context menu for audio and video conversion. Select any media file in Explorer → **FFmpeg Convert** → pick a format from the dark GUI → done. No terminal, no admin rights.
 
+**[Project page →](https://webdev.dvlce.ca/ffmpeg)**
+
 ## Install
 
 ### One-click installer (recommended)
@@ -63,6 +65,7 @@ powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\FFmpegMenu\uninstall.ps
 ## Related
 
 - [doc-convert-menu](https://github.com/toyuvalo/doc-convert-menu) — same idea for image and document conversion
+- [webdev.dvlce.ca/ffmpeg](https://webdev.dvlce.ca/ffmpeg) — project page
 
 ## License
 
