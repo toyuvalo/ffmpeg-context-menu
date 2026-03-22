@@ -63,3 +63,7 @@ powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\FFmpegMenu\uninstall.ps
 ## Related
 
 - [doc-convert-menu](https://github.com/toyuvalo/doc-convert-menu) — same idea for image and document conversion
+
+## License
+
+MIT with [Commons Clause](https://commonsclause.com/) — free to use, modify, and share. Commercial resale not permitted.
