@@ -38,7 +38,8 @@ $fileRoot = "HKCU:\Software\Classes\*\shell\FFmpegConvert"
 
 New-Item -Path $fileRoot -Force | Out-Null
 Set-ItemProperty -Path $fileRoot -Name "(Default)" -Value "FFmpeg Convert"
-Set-ItemProperty -Path $fileRoot -Name "Icon" -Value "shell32.dll,277"
+$icoPath = Join-Path $PSScriptRoot "ffmpeg.ico"
+Set-ItemProperty -Path $fileRoot -Name "Icon" -Value "$icoPath,0"
 Set-ItemProperty -Path $fileRoot -Name "MultiSelectModel" -Value "Player"
 
 $commandKey = "$fileRoot\command"
