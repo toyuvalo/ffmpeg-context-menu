@@ -1,4 +1,4 @@
-# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing
+# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.2.0
 param(
     [string]$Path,
     [string]$ListFile,
@@ -104,6 +104,49 @@ if (-not $Format) {
     Add-FormatButton "Extract Audio (MP3)" "extract-mp3" ([ref]$yPos)
     Add-FormatButton "Extract Audio (WAV)" "extract-wav" ([ref]$yPos)
 
+    # ---- Shrink... button ----
+    $yPos += 6
+    $sepShrink = New-Object System.Windows.Forms.Panel
+    $sepShrink.Location = New-Object System.Drawing.Point(20, $yPos)
+    $sepShrink.Size = New-Object System.Drawing.Size(260, 1)
+    $sepShrink.BackColor = [System.Drawing.Color]::FromArgb(55, 55, 57)
+    $pickerForm.Controls.Add($sepShrink)
+    $yPos += 8
+
+    $shrinkBtn = New-Object System.Windows.Forms.Button
+    $shrinkBtn.Text = "Shrink..."
+    $shrinkBtn.Location = New-Object System.Drawing.Point(20, $yPos)
+    $shrinkBtn.Size = New-Object System.Drawing.Size(260, 28)
+    $shrinkBtn.FlatStyle = "Flat"
+    $shrinkBtn.FlatAppearance.BorderSize = 1
+    $shrinkBtn.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 80, 20)
+    $shrinkBtn.BackColor = [System.Drawing.Color]::FromArgb(44, 32, 12)
+    $shrinkBtn.ForeColor = [System.Drawing.Color]::FromArgb(255, 160, 60)
+    $shrinkBtn.TextAlign = "MiddleLeft"
+    $shrinkBtn.Padding = New-Object System.Windows.Forms.Padding(8, 0, 0, 0)
+    $shrinkBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $shrinkBtn.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $shrinkBtn.Add_Click({
+        $pickerForm.Close()
+        $shrinkScript = Join-Path $env:LOCALAPPDATA "ShrinkMenu\shrink.ps1"
+        if (Test-Path $shrinkScript) {
+            $shrinkArgs = ""
+            if ($ListFile -and (Test-Path $ListFile)) {
+                $shrinkArgs = "-ListFile `"$ListFile`""
+            } elseif ($Path) {
+                $shrinkArgs = "-Path `"$Path`""
+            }
+            if ($shrinkArgs) {
+                Start-Process "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$shrinkScript`" $shrinkArgs" -WindowStyle Hidden
+            }
+        }
+        exit 0
+    })
+    $shrinkBtn.Add_MouseEnter({ $this.BackColor = [System.Drawing.Color]::FromArgb(60, 44, 18) })
+    $shrinkBtn.Add_MouseLeave({ $this.BackColor = [System.Drawing.Color]::FromArgb(44, 32, 12) })
+    $pickerForm.Controls.Add($shrinkBtn)
+    $yPos += 34
+
     $pickerForm.ClientSize = New-Object System.Drawing.Size(300, ($yPos + 12))
 
     [System.Windows.Forms.Application]::Run($pickerForm)
@@ -112,57 +155,23 @@ if (-not $Format) {
     $Format = $script:pickedFormat
 }
 
-# ── Media extensions ──
-$audioExts = @('.mp3','.wav','.flac','.aac','.ogg','.wma','.m4a')
-$videoExts = @('.mp4','.mkv','.avi','.mov','.webm','.wmv','.flv','.ts')
-$allMediaExts = $audioExts + $videoExts
-
-$audioFormats = @('mp3','wav','flac','aac','extract-mp3','extract-wav')
-$videoFormats = @('mp4','mkv','webm')
-$isAudioTarget = $audioFormats -contains $Format
-$isVideoTarget = $videoFormats -contains $Format
-
-# ── Build file list ──
+# ── Build file list (accept any file, let ffmpeg handle it) ──
 $files = @()
 
 if ($ListFile -and (Test-Path $ListFile)) {
-    # Multi-select or single file via launcher
     $paths = @(Get-Content -Path $ListFile -Encoding UTF8 | Where-Object { $_.Trim() -ne "" })
     foreach ($p in $paths) {
         $p = $p.Trim()
         if (Test-Path $p -PathType Leaf) {
-            $f = Get-Item $p
-            $ext = $f.Extension.ToLower()
-            if ($isVideoTarget) {
-                if ($videoExts -contains $ext) { $files += $f }
-            } elseif ($isAudioTarget) {
-                if ($allMediaExts -contains $ext) { $files += $f }
-            }
+            $files += Get-Item $p
         } elseif (Test-Path $p -PathType Container) {
-            # Folder path in list
-            $allFiles = Get-ChildItem -Path $p -File
-            foreach ($f in $allFiles) {
-                $ext = $f.Extension.ToLower()
-                if ($isVideoTarget) {
-                    if ($videoExts -contains $ext) { $files += $f }
-                } elseif ($isAudioTarget) {
-                    if ($allMediaExts -contains $ext) { $files += $f }
-                }
-            }
+            $files += @(Get-ChildItem -Path $p -File)
         }
     }
     Remove-Item -Path $ListFile -Force -ErrorAction SilentlyContinue
 } elseif ($Path) {
     if (Test-Path $Path -PathType Container) {
-        $allFiles = Get-ChildItem -Path $Path -File
-        foreach ($f in $allFiles) {
-            $ext = $f.Extension.ToLower()
-            if ($isVideoTarget) {
-                if ($videoExts -contains $ext) { $files += $f }
-            } elseif ($isAudioTarget) {
-                if ($allMediaExts -contains $ext) { $files += $f }
-            }
-        }
+        $files += @(Get-ChildItem -Path $Path -File)
     } elseif (Test-Path $Path -PathType Leaf) {
         $files += Get-Item $Path
     }
