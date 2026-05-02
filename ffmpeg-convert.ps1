@@ -1,4 +1,4 @@
-# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.2.0
+# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.2.1
 param(
     [string]$Path,
     [string]$ListFile,

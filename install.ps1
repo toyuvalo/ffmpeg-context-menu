@@ -18,6 +18,8 @@ Write-Host "Installing FFmpeg Context Menu..." -ForegroundColor Cyan
 # ── Clean up old entries first ──
 $oldKeys = @(
     "HKCU:\Software\Classes\*\shell\FFmpegConvert",
+    "HKCU:\Software\Classes\Directory\shell\FFmpegConvert",
+    "HKCU:\Software\Classes\Directory\Background\shell\FFmpegConvert",
     "HKCU:\Software\Classes\Directory\shell\FFmpegBatchConvert",
     "HKCU:\Software\Classes\Directory\Background\shell\FFmpegBatchConvert"
 )
@@ -27,6 +29,8 @@ foreach ($key in $oldKeys) {
         Write-Host "  Removed old: $key" -ForegroundColor DarkGray
     }
 }
+
+$icoPath = Join-Path $PSScriptRoot "ffmpeg.ico"
 
 # ══════════════════════════════════════
 #  FILE context menu (right-click files)
@@ -38,7 +42,6 @@ $fileRoot = "HKCU:\Software\Classes\*\shell\FFmpegConvert"
 
 New-Item -Path $fileRoot -Force | Out-Null
 Set-ItemProperty -Path $fileRoot -Name "(Default)" -Value "FFmpeg Convert"
-$icoPath = Join-Path $PSScriptRoot "ffmpeg.ico"
 Set-ItemProperty -Path $fileRoot -Name "Icon" -Value "$icoPath,0"
 Set-ItemProperty -Path $fileRoot -Name "MultiSelectModel" -Value "Player"
 
@@ -48,11 +51,34 @@ New-Item -Path $commandKey -Force | Out-Null
 $cmd = "wscript.exe `"$launcherPath`" `"%1`""
 Set-ItemProperty -Path $commandKey -Name "(Default)" -Value $cmd
 
+# ══════════════════════════════════════
+#  FOLDER context menu (right-click folder + empty space inside folder)
+#  Converts every file in the folder. Format picker still appears.
+#  Bypasses launcher.vbs — no multi-select collection needed for a directory arg.
+# ══════════════════════════════════════
+
+$folderCmd = "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$scriptPath`" -Path `"%V`""
+
+foreach ($folderRoot in @(
+    "HKCU:\Software\Classes\Directory\shell\FFmpegConvert",
+    "HKCU:\Software\Classes\Directory\Background\shell\FFmpegConvert"
+)) {
+    New-Item -Path $folderRoot -Force | Out-Null
+    Set-ItemProperty -Path $folderRoot -Name "(Default)" -Value "FFmpeg Convert (all files)"
+    Set-ItemProperty -Path $folderRoot -Name "Icon" -Value "$icoPath,0"
+
+    $folderCommandKey = "$folderRoot\command"
+    New-Item -Path $folderCommandKey -Force | Out-Null
+    Set-ItemProperty -Path $folderCommandKey -Name "(Default)" -Value $folderCmd
+}
+
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "You should now see:" -ForegroundColor White
 Write-Host '  - "FFmpeg Convert" when right-clicking any file(s)' -ForegroundColor Gray
+Write-Host '  - "FFmpeg Convert (all files)" when right-clicking a folder' -ForegroundColor Gray
+Write-Host '    or empty space inside a folder' -ForegroundColor Gray
 Write-Host '  - A format picker dialog will appear after clicking' -ForegroundColor Gray
 Write-Host ""
 Write-Host "If the menu doesn't appear, restart Explorer or log out/in." -ForegroundColor Yellow

@@ -5,6 +5,8 @@ Write-Host "Removing FFmpeg Context Menu entries..." -ForegroundColor Cyan
 
 $keys = @(
     "HKCU:\Software\Classes\*\shell\FFmpegConvert",
+    "HKCU:\Software\Classes\Directory\shell\FFmpegConvert",
+    "HKCU:\Software\Classes\Directory\Background\shell\FFmpegConvert",
     "HKCU:\Software\Classes\Directory\shell\FFmpegBatchConvert",
     "HKCU:\Software\Classes\Directory\Background\shell\FFmpegBatchConvert"
 )

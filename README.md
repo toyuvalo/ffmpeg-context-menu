@@ -1,6 +1,6 @@
 # FFmpeg Context Menu
 
-Windows right-click context menu for audio and video conversion. Select any media file in Explorer → **FFmpeg Convert** → pick a format from the dark GUI → done. No terminal, no admin rights.
+Windows right-click context menu for audio and video conversion. Select any media file in Explorer — or right-click a folder to convert everything inside it — → **FFmpeg Convert** → pick a format from the dark GUI → done. No terminal, no admin rights.
 
 **[Project page →](https://webdev.dvlce.ca/ffmpeg)**
 
@@ -33,6 +33,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 ## Features
 
+- **Right-click files OR folders** — files trigger per-file conversion; folders convert every file inside (one shot, no need to select all)
 - **Format picker GUI** — dark-themed Windows Forms dialog, pick format before converting
 - **Parallel conversion** — up to 4 simultaneous jobs (capped to CPU core count)
 - **Live progress window** — per-file status: Queued → Converting → Done / Failed, with file size before and after
