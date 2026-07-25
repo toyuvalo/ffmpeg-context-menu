@@ -1,4 +1,16 @@
-# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.2.1
+# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.3.0
+#
+# 2026-07-25 — awkward characters in a file name no longer break the run:
+#   * launcher.vbs now hands over a UTF-8 file list. It used to write the list
+#     in the system codepage while this script read it back as UTF-8, so a
+#     smart quote (’), accent or dash turned into a replacement character, the
+#     path stopped resolving, and the file silently vanished from the batch.
+#   * every path operation uses -LiteralPath — '[' and ']' in a name were
+#     treated as a wildcard character class, dropping those files too.
+#   * each file is temporarily renamed to a sanitised name for the duration of
+#     the conversion; afterwards the source name is restored and the output is
+#     renamed to the original name with the new extension. Nothing is ever
+#     overwritten — colliding names get a _1, _2, ... suffix.
 param(
     [string]$Path,
     [string]$ListFile,
@@ -10,6 +22,8 @@ param(
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+$scriptVersion = "1.3.0"
+
 # ── Check ffmpeg ──
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     [System.Windows.Forms.MessageBox]::Show("ffmpeg not found on PATH.`nInstall it and make sure it's in your system PATH.", "FFmpeg Convert", "OK", "Error") | Out-Null
@@ -19,7 +33,7 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 # ── Format picker if not specified ──
 if (-not $Format) {
     $pickerForm = New-Object System.Windows.Forms.Form
-    $pickerForm.Text = "FFmpeg Convert"
+    $pickerForm.Text = "FFmpeg Convert v$scriptVersion"
     $pickerForm.Size = New-Object System.Drawing.Size(320, 400)
     $pickerForm.StartPosition = "CenterScreen"
     $pickerForm.FormBorderStyle = "FixedSingle"
@@ -158,22 +172,27 @@ if (-not $Format) {
 # ── Build file list (accept any file, let ffmpeg handle it) ──
 $files = @()
 
-if ($ListFile -and (Test-Path $ListFile)) {
-    $paths = @(Get-Content -Path $ListFile -Encoding UTF8 | Where-Object { $_.Trim() -ne "" })
+if ($ListFile -and (Test-Path -LiteralPath $ListFile)) {
+    # ReadAllLines honours the BOM (UTF-8 from launcher.vbs, UTF-16 from anything
+    # else) and defaults to UTF-8. Get-Content -Encoding UTF8 used to mangle every
+    # non-ASCII character the launcher wrote in the system codepage.
+    $listFullPath = (Resolve-Path -LiteralPath $ListFile).Path
+    $paths = @([System.IO.File]::ReadAllLines($listFullPath) | Where-Object { $_.Trim() -ne "" })
     foreach ($p in $paths) {
         $p = $p.Trim()
-        if (Test-Path $p -PathType Leaf) {
-            $files += Get-Item $p
-        } elseif (Test-Path $p -PathType Container) {
-            $files += @(Get-ChildItem -Path $p -File)
+        # -LiteralPath throughout: '[' / ']' in a file name are wildcards otherwise.
+        if (Test-Path -LiteralPath $p -PathType Leaf) {
+            $files += Get-Item -LiteralPath $p
+        } elseif (Test-Path -LiteralPath $p -PathType Container) {
+            $files += @(Get-ChildItem -LiteralPath $p -File)
         }
     }
-    Remove-Item -Path $ListFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $listFullPath -Force -ErrorAction SilentlyContinue
 } elseif ($Path) {
-    if (Test-Path $Path -PathType Container) {
-        $files += @(Get-ChildItem -Path $Path -File)
-    } elseif (Test-Path $Path -PathType Leaf) {
-        $files += Get-Item $Path
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $files += @(Get-ChildItem -LiteralPath $Path -File)
+    } elseif (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $files += Get-Item -LiteralPath $Path
     }
 }
 
@@ -200,7 +219,7 @@ $formatLabel = switch ($Format) {
 # ══════════════════════════════════════
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "FFmpeg Convert - $formatLabel"
+$form.Text = "FFmpeg Convert v$scriptVersion - $formatLabel"
 $form.Size = New-Object System.Drawing.Size(560, 420)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
@@ -276,6 +295,67 @@ $closeBtn.Visible = $false
 $closeBtn.Add_Click({ $form.Close() })
 $form.Controls.Add($closeBtn)
 
+# ══════════════════════════════════════
+#  FILE NAME SANITISING
+#  Rather than trying to escape every awkward character, the file is renamed
+#  to a safe name for the duration of the conversion and renamed back after.
+#  Nothing is overwritten: every target name is checked first and gets a
+#  _1 / _2 / ... suffix if it is already taken.
+# ══════════════════════════════════════
+
+# Anything outside this set gets replaced. Deliberately narrow — it covers
+# smart quotes and other non-ASCII (mangled in transit), '%' (ffmpeg reads it
+# as an image2 sequence pattern), and quoting characters.
+$script:unsafeCharPattern = '[^A-Za-z0-9 ._\-()\[\]]'
+
+# Names already claimed by a queued/running job, so parallel jobs can't pick
+# the same temporary name.
+$script:reservedPaths = @()
+
+function Test-NameIsSafe {
+    param([string]$Base)
+    if ($Base -match $script:unsafeCharPattern) { return $false }
+    if ($Base -match '^\s*-')                   { return $false }   # ffmpeg reads a leading - as an option
+    return $true
+}
+
+function ConvertTo-SafeBaseName {
+    param([string]$Base)
+    $safe = [regex]::Replace($Base, $script:unsafeCharPattern, '_')
+    $safe = $safe -replace '_{2,}', '_'
+    $safe = $safe -replace '^[\s.]+|[\s.]+$', ''
+    if ($safe -match '^-') { $safe = "_$safe" }
+    if ([string]::IsNullOrWhiteSpace($safe)) { $safe = 'ffmpeg_input' }
+    return $safe
+}
+
+# Returns a path that is free right now. $Ignore lets a caller treat one
+# existing path (its own output file) as available.
+function Get-NonCollidingPath {
+    param([string]$Dir, [string]$Base, [string]$Ext, [string]$Ignore = "")
+    $candidate = Join-Path $Dir "$Base$Ext"
+    $n = 1
+    while ($candidate -ne $Ignore -and
+           ((Test-Path -LiteralPath $candidate) -or ($script:reservedPaths -contains $candidate))) {
+        $candidate = Join-Path $Dir ("{0}_{1}{2}" -f $Base, $n, $Ext)
+        $n++
+        if ($n -gt 9999) { break }
+    }
+    return $candidate
+}
+
+# Puts the source file back under the name the user gave it. Safe to call more
+# than once and on every exit path — success, failure and cancel.
+function Restore-SourceName {
+    param([hashtable]$Job)
+    if (-not $Job.Renamed) { return }
+    try {
+        Rename-Item -LiteralPath $Job.SourcePath -NewName $Job.OrigName -ErrorAction Stop
+        $Job.SourcePath = $Job.OrigPath
+        $Job.Renamed    = $false
+    } catch {}
+}
+
 # ── Conversion function ──
 function Get-FFmpegArgString {
     param([string]$InputFile, [string]$OutputFile, [string]$Fmt)
@@ -293,7 +373,7 @@ function Get-FFmpegArgString {
 
     switch ($Fmt) {
         'mp3'         { $a += "-codec:a libmp3lame -q:a 2 -ar $sampleRate -vn" }
-        'wav'         { $a += "-codec:a pcm_s16le -ar $sampleRate -vn" }
+        'wav'         { $a += "-codec:a pcm_s24le -ar $sampleRate -vn" }
         'flac'        { $a += "-codec:a flac -compression_level 8 -ar $sampleRate -vn" }
         'aac'         { $a += "-codec:a aac -b:a 192k -ar $sampleRate -vn" }
         'mp4'         { $a += "-codec:v libx264 -crf 23 -preset medium -codec:a aac -b:a 160k -movflags +faststart" }
@@ -328,16 +408,34 @@ function Start-NextJob {
     while ($script:runningJobs.Count -lt $maxParallel -and $script:jobQueue.Count -gt 0) {
         $idx = $script:jobQueue.Dequeue()
         $file = $files[$idx]
-        $inputPath = $file.FullName
-        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
-        $dir = $file.DirectoryName
+        $dir      = $file.DirectoryName
+        $origName = $file.Name
+        $origPath = $file.FullName
+        $origBase = [System.IO.Path]::GetFileNameWithoutExtension($origName)
+        $origExt  = [System.IO.Path]::GetExtension($origName)
 
-        $outputPath = Join-Path $dir "$baseName$outExt"
-        if ($outputPath -eq $inputPath) {
-            $outputPath = Join-Path $dir "$($baseName)_converted$outExt"
+        # Convert against a sanitised name; the original name is restored below.
+        $sourcePath = $origPath
+        $renamed    = $false
+        if (-not (Test-NameIsSafe $origBase)) {
+            $safePath = Get-NonCollidingPath -Dir $dir -Base (ConvertTo-SafeBaseName $origBase) -Ext $origExt
+            try {
+                Rename-Item -LiteralPath $origPath -NewName ([System.IO.Path]::GetFileName($safePath)) -ErrorAction Stop
+                $sourcePath = $safePath
+                $renamed    = $true
+                $script:reservedPaths += $safePath
+            } catch {
+                # Locked or read-only — leave it alone and let ffmpeg try as-is.
+            }
         }
 
-        $argString = Get-FFmpegArgString -InputFile $inputPath -OutputFile $outputPath -Fmt $Format
+        # Free by construction, so a failed job's partial output is always safe
+        # to delete and never clobbers an existing file.
+        $workBase   = [System.IO.Path]::GetFileNameWithoutExtension($sourcePath)
+        $outputPath = Get-NonCollidingPath -Dir $dir -Base $workBase -Ext $outExt
+        $script:reservedPaths += $outputPath
+
+        $argString = Get-FFmpegArgString -InputFile $sourcePath -OutputFile $outputPath -Fmt $Format
 
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = "ffmpeg"
@@ -357,9 +455,15 @@ function Start-NextJob {
         $listView.Items[$idx].ForeColor = [System.Drawing.Color]::FromArgb(255, 220, 100)
 
         $script:runningJobs[$idx] = @{
-            Process = $proc
+            Process    = $proc
             OutputPath = $outputPath
-            File = $file
+            File       = $file
+            SourcePath = $sourcePath
+            Renamed    = $renamed
+            OrigPath   = $origPath
+            OrigName   = $origName
+            OrigBase   = $origBase
+            OrigExt    = $origExt
         }
     }
 }
@@ -375,29 +479,51 @@ $timer.Add_Tick({
         if ($proc.HasExited) {
             $completed += $idx
 
-            if ($proc.ExitCode -eq 0 -and (Test-Path $job.OutputPath)) {
+            $succeeded = ($proc.ExitCode -eq 0) -and (Test-Path -LiteralPath $job.OutputPath)
+
+            # Whatever happened, the source goes back to the name the user knows.
+            Restore-SourceName $job
+
+            if ($succeeded) {
                 # Move original to preconvert
                 $dir = $job.File.DirectoryName
                 $preDir = Join-Path $dir "preconvert"
-                if (-not (Test-Path $preDir)) {
+                if (-not (Test-Path -LiteralPath $preDir)) {
                     New-Item -Path $preDir -ItemType Directory -Force | Out-Null
                 }
-                $dest = Join-Path $preDir $job.File.Name
+                $dest = Get-NonCollidingPath -Dir $preDir -Base $job.OrigBase -Ext $job.OrigExt
                 try {
-                    Move-Item -Path $job.File.FullName -Destination $dest -Force
+                    Move-Item -LiteralPath $job.SourcePath -Destination $dest -Force
                 } catch {}
 
+                # Now give the output the original name with the new extension.
+                # Runs after the move so the source's own name is free again.
+                $finalPath = Get-NonCollidingPath -Dir $dir -Base $job.OrigBase -Ext $outExt -Ignore $job.OutputPath
+                if ($finalPath -ne $job.OutputPath) {
+                    try {
+                        Rename-Item -LiteralPath $job.OutputPath -NewName ([System.IO.Path]::GetFileName($finalPath)) -ErrorAction Stop
+                    } catch {
+                        $finalPath = $job.OutputPath
+                    }
+                }
+
+                $listView.Items[$idx].SubItems[0].Text = [System.IO.Path]::GetFileName($finalPath)
                 $listView.Items[$idx].SubItems[1].Text = "Done"
                 $listView.Items[$idx].ForeColor = [System.Drawing.Color]::FromArgb(100, 220, 100)
 
                 # Show new file size
-                if (Test-Path $job.OutputPath) {
-                    $newSize = [math]::Round((Get-Item $job.OutputPath).Length / 1MB, 1)
+                if (Test-Path -LiteralPath $finalPath) {
+                    $newSize = [math]::Round((Get-Item -LiteralPath $finalPath).Length / 1MB, 1)
                     $listView.Items[$idx].SubItems[2].Text = "$newSize MB"
                 }
 
                 $script:successCount++
             } else {
+                # The output path was free when the job started, so anything
+                # there now is ffmpeg's partial write — safe to clean up.
+                if (Test-Path -LiteralPath $job.OutputPath) {
+                    Remove-Item -LiteralPath $job.OutputPath -Force -ErrorAction SilentlyContinue
+                }
                 $listView.Items[$idx].SubItems[1].Text = "Failed"
                 $listView.Items[$idx].ForeColor = [System.Drawing.Color]::FromArgb(255, 80, 80)
                 $script:failCount++
@@ -437,7 +563,13 @@ $form.Add_Shown({
 $form.Add_FormClosing({
     $timer.Stop()
     foreach ($kvp in $script:runningJobs.GetEnumerator()) {
-        try { $kvp.Value.Process.Kill() } catch {}
+        $job = $kvp.Value
+        try { $job.Process.Kill(); $job.Process.WaitForExit(2000) | Out-Null } catch {}
+        # Cancelled mid-flight: put the name back and drop the partial output.
+        Restore-SourceName $job
+        if (Test-Path -LiteralPath $job.OutputPath) {
+            Remove-Item -LiteralPath $job.OutputPath -Force -ErrorAction SilentlyContinue
+        }
     }
 })
 

@@ -24,8 +24,11 @@ $oldKeys = @(
     "HKCU:\Software\Classes\Directory\Background\shell\FFmpegBatchConvert"
 )
 foreach ($key in $oldKeys) {
-    if (Test-Path $key) {
-        Remove-Item -Path $key -Recurse -Force -ErrorAction SilentlyContinue
+    # -LiteralPath is mandatory: HKCU:\Software\Classes\*\shell\... contains a
+    # literal '*' (the Windows wildcard verb-class). Without -LiteralPath, PS
+    # treats '*' as a glob and Remove-Item / Test-Path enumerate every class.
+    if (Test-Path -LiteralPath $key) {
+        Remove-Item -LiteralPath $key -Recurse -Force -ErrorAction SilentlyContinue
         Write-Host "  Removed old: $key" -ForegroundColor DarkGray
     }
 }
@@ -40,16 +43,24 @@ $icoPath = Join-Path $PSScriptRoot "ffmpeg.ico"
 
 $fileRoot = "HKCU:\Software\Classes\*\shell\FFmpegConvert"
 
+# CRITICAL: -LiteralPath everywhere. The path contains a literal '*' (the
+# Windows shell wildcard-class for "any file"). Without -LiteralPath,
+# PowerShell's provider treats '*' as a glob:
+#   - Set-Item -Path '*\...' HANGS trying to enumerate every file class
+#   - Set-ItemProperty -Path '*\...' silently fails to write (Default)
+# Together those produced the "no app associated" symptom 2026-05-19.
+# Also use Set-ItemProperty -Name '(default)' (lowercase) for the unnamed
+# default value — that's the canonical form.
 New-Item -Path $fileRoot -Force | Out-Null
-Set-ItemProperty -Path $fileRoot -Name "(Default)" -Value "FFmpeg Convert"
-Set-ItemProperty -Path $fileRoot -Name "Icon" -Value "$icoPath,0"
-Set-ItemProperty -Path $fileRoot -Name "MultiSelectModel" -Value "Player"
+Set-ItemProperty -LiteralPath $fileRoot -Name "(default)"        -Value "FFmpeg Convert"
+Set-ItemProperty -LiteralPath $fileRoot -Name "Icon"             -Value "$icoPath,0"
+Set-ItemProperty -LiteralPath $fileRoot -Name "MultiSelectModel" -Value "Player"
 
 $commandKey = "$fileRoot\command"
 New-Item -Path $commandKey -Force | Out-Null
 
 $cmd = "wscript.exe `"$launcherPath`" `"%1`""
-Set-ItemProperty -Path $commandKey -Name "(Default)" -Value $cmd
+Set-ItemProperty -LiteralPath $commandKey -Name "(default)" -Value $cmd
 
 # ══════════════════════════════════════
 #  FOLDER context menu (right-click folder + empty space inside folder)
@@ -63,13 +74,14 @@ foreach ($folderRoot in @(
     "HKCU:\Software\Classes\Directory\shell\FFmpegConvert",
     "HKCU:\Software\Classes\Directory\Background\shell\FFmpegConvert"
 )) {
+    # Directory paths don't contain '*' but use -LiteralPath for consistency.
     New-Item -Path $folderRoot -Force | Out-Null
-    Set-ItemProperty -Path $folderRoot -Name "(Default)" -Value "FFmpeg Convert (all files)"
-    Set-ItemProperty -Path $folderRoot -Name "Icon" -Value "$icoPath,0"
+    Set-ItemProperty -LiteralPath $folderRoot -Name "(default)" -Value "FFmpeg Convert (all files)"
+    Set-ItemProperty -LiteralPath $folderRoot -Name "Icon"      -Value "$icoPath,0"
 
     $folderCommandKey = "$folderRoot\command"
     New-Item -Path $folderCommandKey -Force | Out-Null
-    Set-ItemProperty -Path $folderCommandKey -Name "(Default)" -Value $folderCmd
+    Set-ItemProperty -LiteralPath $folderCommandKey -Name "(default)" -Value $folderCmd
 }
 
 Write-Host ""

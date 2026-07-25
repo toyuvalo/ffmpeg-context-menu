@@ -38,6 +38,8 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 - **Parallel conversion** — up to 4 simultaneous jobs (capped to CPU core count)
 - **Live progress window** — per-file status: Queued → Converting → Done / Failed, with file size before and after
 - **Sample rate preservation** — ffprobe reads source sample rate and passes it through (floored at 44100 Hz)
+- **Handles any file name** — smart quotes (`’`), accents, `[brackets]`, `%`, leading dashes. The file is temporarily renamed to a safe name for the conversion, then the output takes the original name with its new extension
+- **Never overwrites** — if the target name is taken, the output gets a `_1`, `_2`, … suffix instead
 - **Originals kept safe** — on success, originals moved to a `preconvert/` subfolder, never deleted
 - **Auto ffmpeg download** — installer fetches a compatible ffmpeg build automatically
 - **No admin rights** — all registry entries written to HKCU
