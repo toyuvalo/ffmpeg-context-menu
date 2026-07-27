@@ -51,15 +51,33 @@ echo %%FILE6%%=
 echo %%FILE7%%=
 ) > "%SED%"
 
-iexpress /N /Q "%SED%"
+REM Record the existing build so success can be judged on the timestamp.
+REM "if exist" alone is a false positive: it passes on a stale .exe from a
+REM previous build, which is how a broken iexpress call went unnoticed from
+REM 2026-05 to 2026-07.
+set "STAMP="
+if exist "%OUT%" for %%F in ("%OUT%") do set "STAMP=%%~tF"
+
+REM Do NOT quote %SED%. IExpress takes the quotes as part of the file name and
+REM fails with "Error opening the IExpress Self Extraction Directive file" --
+REM silently, because /Q suppresses that dialog. Keep %TEMP% free of spaces.
+iexpress /N /Q %SED%
 del "%SED%" >nul 2>&1
 
-if exist "%OUT%" (
+set "NEWSTAMP="
+if exist "%OUT%" for %%F in ("%OUT%") do set "NEWSTAMP=%%~tF"
+
+if not defined NEWSTAMP (
     echo.
-    echo   Built: %OUT%
+    echo   ERROR: Build failed - no output produced.
+    echo.
+) else if "%NEWSTAMP%"=="%STAMP%" (
+    echo.
+    echo   ERROR: Build failed - %OUT% is unchanged ^(%NEWSTAMP%^).
+    echo          iexpress produced nothing; the old installer is still there.
     echo.
 ) else (
     echo.
-    echo   ERROR: Build failed.
+    echo   Built: %OUT%  ^(%NEWSTAMP%^)
     echo.
 )
