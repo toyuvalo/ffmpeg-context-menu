@@ -12,7 +12,7 @@ Download **[FFmpegConvertSetup.exe](https://github.com/toyuvalo/ffmpeg-context-m
 
 The installer (Inno Setup, per-user, no admin, code-signed by Yuval Olsha):
 - Copies `FFmpegConvert.exe` and `ffmpeg-convert.ps1` to `%LOCALAPPDATA%\FFmpegMenu\`
-- Downloads ffmpeg (gyan.dev essentials build) only if none is found, and adds it to your user PATH
+- Downloads ffmpeg only if none is on your PATH: the newest gyan.dev essentials build from its GitHub mirror ([GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg)), SHA-256 checked, into `%LOCALAPPDATA%\Programs\DVLCE\ffmpeg`, added to your user PATH. Shrink Menu uses the same copy; uninstalling removes it only when no other tool still needs it
 - Registers the file, folder and folder-background menu entries in HKCU
 - Adds a normal uninstall entry in Settings > Apps. It runs no scripts
 

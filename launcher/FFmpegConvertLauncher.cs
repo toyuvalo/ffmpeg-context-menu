@@ -22,8 +22,8 @@ using System.Threading;
 [assembly: AssemblyProduct("FFmpeg Convert")]
 [assembly: AssemblyCompany("DVLCE")]
 [assembly: AssemblyCopyright("MIT with Commons Clause")]
-[assembly: AssemblyVersion("1.4.0.0")]
-[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyVersion("1.4.1.0")]
+[assembly: AssemblyFileVersion("1.4.1.0")]
 
 static class FFmpegConvertLauncher
 {

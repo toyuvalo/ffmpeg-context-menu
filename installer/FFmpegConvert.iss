@@ -1,17 +1,18 @@
-; FFmpegConvert.iss -- Inno Setup script for FFmpegConvertSetup.exe (v1.4.0)
+; FFmpegConvert.iss -- Inno Setup script for FFmpegConvertSetup.exe (v1.4.1)
 ; Replaces the IExpress package. IExpress extracted to %TEMP% and ran
 ; setup.cmd -> powershell -ExecutionPolicy Bypass, the same chain malware
 ; droppers use, and antivirus flags it. This installer runs no scripts: it
 ; copies files, writes the HKCU context-menu key itself, and (only when ffmpeg
-; is not already installed) downloads the gyan.dev essentials build, unpacks
-; it with the in-box tar.exe and adds it to the user PATH.
+; is not already installed) downloads it -- see dvlce-deps.iss, shared with
+; Shrink Menu. v1.4.1 moved ffmpeg from {app}fmpeg to the shared folder.
 ; Build: build.cmd (needs Inno Setup 6, ISCC.exe).
 
-#define AppVersion "1.4.0"
-#define FFmpegUrl "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+#define AppVersion "1.4.1"
+#define AppGuid "B3E91F4A-2C7D-4A58-9E16-5D0C8F2A7B43"
+#define NeedFFmpeg
 
 [Setup]
-AppId={{B3E91F4A-2C7D-4A58-9E16-5D0C8F2A7B43}
+AppId={{{#AppGuid}}
 AppName=FFmpeg Convert
 AppVersion={#AppVersion}
 AppPublisher=DVLCE
@@ -55,7 +56,7 @@ Type: files; Name: "{app}\install.cmd"
 Type: files; Name: "{app}\uninstall.ps1"
 
 [UninstallDelete]
-; ffmpeg.exe / ffprobe.exe are downloaded by [Code], so Inno does not track them.
+; v1.4.0 downloaded ffmpeg here. [Code] moves it to the shared folder; this catches any leftover.
 Type: filesandordirs; Name: "{app}\ffmpeg"
 
 [Registry]
@@ -78,129 +79,36 @@ Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FFmpegConvert";
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FFmpegConvert"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\ffmpeg.ico,0"
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\FFmpegConvert\command"; ValueType: string; ValueName: ""; ValueData: """{app}\FFmpegConvert.exe"" --folder ""%V"""
 
-[Code]
-const
-  EnvKey = 'Environment';
+#include "dvlce-deps.iss"
 
-function FFmpegDir(): String;
-begin
-  Result := ExpandConstant('{app}\ffmpeg');
-end;
-
-{ True when ffmpeg.exe is in our folder or anywhere on the PATH. Setup is a
-  32-bit process: without disabling redirection, C:\Windows\System32 on the
-  PATH is searched as SysWOW64 and a 64-bit ffmpeg there is missed. }
-function FFmpegPresent(): Boolean;
+// v1.4.0 kept its own ffmpeg in <app>\ffmpeg. Move it to the shared folder (same
+// volume, so a rename), or drop it when the shared folder already has one.
+procedure MigrateOldFFmpeg();
 var
-  OldRedir: Boolean;
+  Old: String;
 begin
-  Result := FileExists(FFmpegDir() + '\ffmpeg.exe');
-  if Result then Exit;
-  if IsWin64 then OldRedir := EnableFsRedirection(False);
-  try
-    Result := FileSearch('ffmpeg.exe', GetEnv('PATH')) <> '';
-  finally
-    if IsWin64 then EnableFsRedirection(OldRedir);
-  end;
-end;
-
-function PathHas(const Path, Dir: String): Boolean;
-begin
-  Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Path) + ';') > 0;
-end;
-
-procedure AddToUserPath(const Dir: String);
-var
-  Path: String;
-begin
-  if not RegQueryStringValue(HKCU, EnvKey, 'Path', Path) then Path := '';
-  if PathHas(Path, Dir) then Exit;
-  if (Path <> '') and (Copy(Path, Length(Path), 1) <> ';') then Path := Path + ';';
-  RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Path + Dir);
-end;
-
-procedure RemoveFromUserPath(const Dir: String);
-var
-  Path: String;
-  P: Integer;
-begin
-  if not RegQueryStringValue(HKCU, EnvKey, 'Path', Path) then Exit;
-  Path := ';' + Path + ';';
-  P := Pos(';' + Uppercase(Dir) + ';', Uppercase(Path));
-  if P = 0 then Exit;
-  Delete(Path, P, Length(Dir) + 1);
-  Path := Copy(Path, 2, Length(Path) - 2);
-  RegWriteExpandStringValue(HKCU, EnvKey, 'Path', Path);
-end;
-
-{ The zip holds ffmpeg-<version>-essentials_build\bin\. Returns that bin folder. }
-function FindBinDir(const Root: String): String;
-var
-  F: TFindRec;
-begin
-  Result := '';
-  if FindFirst(Root + '\*', F) then
-  try
-    repeat
-      if (F.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0) and (F.Name <> '.') and (F.Name <> '..') and
-         FileExists(Root + '\' + F.Name + '\bin\ffmpeg.exe') then
-      begin
-        Result := Root + '\' + F.Name + '\bin';
-        Exit;
-      end;
-    until not FindNext(F);
-  finally
-    FindClose(F);
-  end;
-end;
-
-function InstallFFmpeg(): Boolean;
-var
-  Zip, Unpack, Bin: String;
-  Code: Integer;
-begin
-  Result := False;
-  WizardForm.StatusLabel.Caption := 'Downloading ffmpeg (about 100 MB)...';
-  try
-    DownloadTemporaryFile('{#FFmpegUrl}', 'ffmpeg.zip', '', nil);
-  except
-    Log('ffmpeg download failed: ' + GetExceptionMessage);
-    Exit;
-  end;
-  WizardForm.StatusLabel.Caption := 'Unpacking ffmpeg...';
-  Zip := ExpandConstant('{tmp}\ffmpeg.zip');
-  Unpack := ExpandConstant('{tmp}\ffmpeg-unpack');
-  ForceDirectories(Unpack);
-  if not Exec(ExpandConstant('{sys}\tar.exe'), '-xf "' + Zip + '" -C "' + Unpack + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+  Old := ExpandConstant('{app}\ffmpeg');
+  if not FileExists(Old + '\ffmpeg.exe') then Exit;
+  RemoveFromUserPath(Old);
+  if not FileExists(SharedDir('ffmpeg') + '\ffmpeg.exe') then
   begin
-    Log('tar.exe failed, exit ' + IntToStr(Code));
-    Exit;
+    DelTree(SharedDir('ffmpeg'), True, True, True);
+    ForceDirectories(ExpandConstant('{localappdata}\Programs\DVLCE'));
+    if RenameFile(Old, SharedDir('ffmpeg')) then Exit;
   end;
-  Bin := FindBinDir(Unpack);
-  if Bin = '' then Exit;
-  ForceDirectories(FFmpegDir());
-  Result := FileCopy(Bin + '\ffmpeg.exe', FFmpegDir() + '\ffmpeg.exe', False) and
-            FileCopy(Bin + '\ffprobe.exe', FFmpegDir() + '\ffprobe.exe', False);
+  DelTree(Old, True, True, True);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then Exit;
-  if FileExists(FFmpegDir() + '\ffmpeg.exe') then
-    AddToUserPath(FFmpegDir())
-  else if not FFmpegPresent() then
-  begin
-    if InstallFFmpeg() then
-      AddToUserPath(FFmpegDir())
-    else
-      SuppressibleMsgBox('FFmpeg Convert is installed, but downloading ffmpeg failed.' + #13#10 +
-        'Install ffmpeg yourself (https://www.gyan.dev/ffmpeg/builds/) and add it to PATH.',
-        mbError, MB_OK, IDOK);
-  end;
+  MigrateOldFFmpeg();
+  InstallDeps();
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
-    RemoveFromUserPath(ExpandConstant('{app}\ffmpeg'));
+  if CurUninstallStep <> usPostUninstall then Exit;
+  RemoveFromUserPath(ExpandConstant('{app}\ffmpeg'));
+  UninstallDeps();
 end;
