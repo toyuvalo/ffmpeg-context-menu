@@ -1,7 +1,8 @@
 # install.ps1 — Register FFmpeg context menu entries (no admin required)
 # Run: powershell -ExecutionPolicy Bypass -File install.ps1
+# The one-click installer (FFmpegConvertSetup.exe) does the same without PowerShell.
 
-$launcherPath = Join-Path $PSScriptRoot "launcher.vbs"
+$launcherPath = Join-Path $PSScriptRoot "build\FFmpegConvert.exe"
 $scriptPath = Join-Path $PSScriptRoot "ffmpeg-convert.ps1"
 
 if (-not (Test-Path $scriptPath)) {
@@ -9,8 +10,15 @@ if (-not (Test-Path $scriptPath)) {
     exit 1
 }
 if (-not (Test-Path $launcherPath)) {
-    Write-Host "ERROR: launcher.vbs not found in $PSScriptRoot" -ForegroundColor Red
-    exit 1
+    # Compile the launcher with the in-box .NET Framework compiler (no extra install).
+    $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+    if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe" }
+    New-Item -ItemType Directory -Path (Split-Path $launcherPath) -Force | Out-Null
+    & $csc /nologo /target:winexe /optimize+ "/win32icon:$(Join-Path $PSScriptRoot 'ffmpeg.ico')" /r:Microsoft.CSharp.dll "/out:$launcherPath" (Join-Path $PSScriptRoot "launcher\FFmpegConvertLauncher.cs")
+    if (-not (Test-Path $launcherPath)) {
+        Write-Host "ERROR: could not build $launcherPath" -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host "Installing FFmpeg Context Menu..." -ForegroundColor Cyan
@@ -38,7 +46,7 @@ $icoPath = Join-Path $PSScriptRoot "ffmpeg.ico"
 # ══════════════════════════════════════
 #  FILE context menu (right-click files)
 #  Single entry — format picker shown in GUI
-#  Uses VBS launcher for fast multi-select collection
+#  Uses the compiled launcher for multi-select collection
 # ══════════════════════════════════════
 
 $fileRoot = "HKCU:\Software\Classes\*\shell\FFmpegConvert"
@@ -59,16 +67,16 @@ Set-ItemProperty -LiteralPath $fileRoot -Name "MultiSelectModel" -Value "Player"
 $commandKey = "$fileRoot\command"
 New-Item -Path $commandKey -Force | Out-Null
 
-$cmd = "wscript.exe `"$launcherPath`" `"%1`""
+$cmd = "`"$launcherPath`" `"%1`""
 Set-ItemProperty -LiteralPath $commandKey -Name "(default)" -Value $cmd
 
 # ══════════════════════════════════════
 #  FOLDER context menu (right-click folder + empty space inside folder)
 #  Converts every file in the folder. Format picker still appears.
-#  Bypasses launcher.vbs — no multi-select collection needed for a directory arg.
+#  The launcher passes the folder to the script as -Path.
 # ══════════════════════════════════════
 
-$folderCmd = "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$scriptPath`" -Path `"%V`""
+$folderCmd = "`"$launcherPath`" --folder `"%V`""
 
 foreach ($folderRoot in @(
     "HKCU:\Software\Classes\Directory\shell\FFmpegConvert",

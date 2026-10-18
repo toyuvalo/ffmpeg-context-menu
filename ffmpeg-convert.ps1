@@ -1,4 +1,4 @@
-# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.3.0
+# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.4.0
 #
 # 2026-07-25 — awkward characters in a file name no longer break the run:
 #   * launcher.vbs now hands over a UTF-8 file list. It used to write the list
@@ -22,7 +22,7 @@ param(
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$scriptVersion = "1.3.0"
+$scriptVersion = "1.4.0"
 
 # ── Check ffmpeg ──
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {

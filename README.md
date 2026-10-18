@@ -10,10 +10,11 @@ Windows right-click context menu for audio and video conversion. Select any medi
 
 Download **[FFmpegConvertSetup.exe](https://github.com/toyuvalo/ffmpeg-context-menu/releases/latest)** and run it.
 
-The installer:
-- Copies scripts to `%LOCALAPPDATA%\FFmpegMenu\`
-- Downloads the latest ffmpeg automatically if not found or outdated
-- Registers the context menu entry in HKCU (no admin required)
+The installer (Inno Setup, per-user, no admin, code-signed by Yuval Olsha):
+- Copies `FFmpegConvert.exe` and `ffmpeg-convert.ps1` to `%LOCALAPPDATA%\FFmpegMenu\`
+- Downloads ffmpeg (gyan.dev essentials build) only if none is found, and adds it to your user PATH
+- Registers the file, folder and folder-background menu entries in HKCU
+- Adds a normal uninstall entry in Settings > Apps. It runs no scripts
 
 ### Manual install
 
@@ -43,6 +44,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 - **Originals kept safe** — on success, originals moved to a `preconvert/` subfolder, never deleted
 - **Auto ffmpeg download** — installer fetches a compatible ffmpeg build automatically
 - **No admin rights** — all registry entries written to HKCU
+- **Code-signed** — from v1.4.0 the installer, launcher, script and uninstaller are signed (publisher Yuval Olsha). Up to v1.3.0 the installer was an IExpress package running `powershell -ExecutionPolicy Bypass` plus a VBScript launcher, a chain antivirus flags
 
 ## Requirements
 
@@ -51,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 ## Build the installer
 
-Requires Windows (IExpress ships with the OS):
+Requires Inno Setup 6 (`winget install JRSoftware.InnoSetup`). The launcher is compiled with the in-box C# compiler. The build signs everything with Azure Artifact Signing; set `NOSIGN=1` to build unsigned:
 
 ```cmd
 build.cmd
@@ -61,9 +63,7 @@ Produces `FFmpegConvertSetup.exe` in the repo root.
 
 ## Uninstall
 
-```powershell
-powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\FFmpegMenu\uninstall.ps1"
-```
+Settings > Apps > FFmpeg Convert > Uninstall. For a manual install: `powershell -ExecutionPolicy Bypass -File uninstall.ps1`.
 
 ## Related
 
