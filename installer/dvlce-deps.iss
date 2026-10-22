@@ -1,6 +1,6 @@
 ; dvlce-deps.iss -- shared runtime-dependency code for the DVLCE right-click tools
 ; (ffmpeg + ffprobe, ImageMagick). The SAME file is in each tool repo that needs it:
-;   ffmpeg-context-menu, shrink-menu, doc-convert-menu-build -- keep the copies identical.
+;   ffmpeg-context-menu, shrink-menu, doc-convert-menu-build, mono-izer -- keep the copies identical.
 ;
 ; A dependency already on the PATH is used as-is. Otherwise its newest release is found
 ; through the GitHub API, downloaded (sha256-checked) to %LOCALAPPDATA%\Programs\DVLCE\<dep>,
@@ -23,9 +23,9 @@ const
   EnvKey = 'Environment';
   UninstKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\';
   SelfAppId = '{' + '{#AppGuid}' + '}';
-  { AppIds of the tools that use each dependency: FFmpeg Convert, Shrink Menu, Doc Convert. }
+  { AppIds of the tools that use each dependency: FFmpeg Convert, Shrink Menu, Doc Convert, mono-izer. }
 #ifndef DepsTestTools
-  FFmpegTools = '{B3E91F4A-2C7D-4A58-9E16-5D0C8F2A7B43} {9C4D2E7B-1A6F-4B83-8E25-6F3B0A9D1C57}';
+  FFmpegTools = '{B3E91F4A-2C7D-4A58-9E16-5D0C8F2A7B43} {9C4D2E7B-1A6F-4B83-8E25-6F3B0A9D1C57} {2E023C08-71B2-4D88-B055-1FFD43B4BB7E}';
   MagickTools = '{9C4D2E7B-1A6F-4B83-8E25-6F3B0A9D1C57} {6F1C2B7E-4D3A-4E8B-9C1F-2A7D5E0B3C91}';
 #else
   FFmpegTools = '{#DepsTestTools}';
