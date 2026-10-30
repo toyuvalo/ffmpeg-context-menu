@@ -1,4 +1,4 @@
-; FFmpegConvert.iss -- Inno Setup script for FFmpegConvertSetup.exe (v1.4.1)
+; FFmpegConvert.iss -- Inno Setup script for FFmpegConvertSetup.exe (v1.4.2)
 ; Replaces the IExpress package. IExpress extracted to %TEMP% and ran
 ; setup.cmd -> powershell -ExecutionPolicy Bypass, the same chain malware
 ; droppers use, and antivirus flags it. This installer runs no scripts: it
@@ -7,7 +7,7 @@
 ; Shrink Menu. v1.4.1 moved ffmpeg from {app}fmpeg to the shared folder.
 ; Build: build.cmd (needs Inno Setup 6, ISCC.exe).
 
-#define AppVersion "1.4.1"
+#define AppVersion "1.4.2"
 #define AppGuid "B3E91F4A-2C7D-4A58-9E16-5D0C8F2A7B43"
 #define NeedFFmpeg
 

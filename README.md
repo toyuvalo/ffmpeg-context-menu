@@ -37,6 +37,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 - **Right-click files OR folders** — files trigger per-file conversion; folders convert every file inside (one shot, no need to select all)
 - **Format picker GUI** — dark-themed Windows Forms dialog, pick format before converting
 - **Parallel conversion** — up to 4 simultaneous jobs (capped to CPU core count)
+- **Sample rate kept** — 48 kHz and up stay as they are in WAV, FLAC and AAC; MP3 tops out at 48 kHz, so a 96 kHz source becomes a 48 kHz MP3 (before v1.4.2 that job failed)
 - **Live progress window** — per-file status: Queued → Converting → Done / Failed, with file size before and after
 - **Sample rate preservation** — ffprobe reads source sample rate and passes it through (floored at 44100 Hz)
 - **Handles any file name** — smart quotes (`’`), accents, `[brackets]`, `%`, leading dashes. The file is temporarily renamed to a safe name for the conversion, then the output takes the original name with its new extension

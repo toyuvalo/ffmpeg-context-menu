@@ -1,4 +1,4 @@
-# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.4.1
+# ffmpeg-convert.ps1 — FFmpeg converter with progress UI and parallel processing  v1.4.2
 #
 # 2026-07-25 — awkward characters in a file name no longer break the run:
 #   * launcher.vbs now hands over a UTF-8 file list. It used to write the list
@@ -22,7 +22,7 @@ param(
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$scriptVersion = "1.4.1"
+$scriptVersion = "1.4.2"
 
 # ── Check ffmpeg ──
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
@@ -369,17 +369,21 @@ function Get-FFmpegArgString {
         }
     } catch {}
 
+    # MP3 (libmp3lame) cannot encode above 48 kHz; a 96 kHz source used to fail the job.
+    # WAV, FLAC and AAC keep the source rate.
+    $mp3Rate = [Math]::Min($sampleRate, 48000)
+
     $a = "-i `"$InputFile`" -y "
 
     switch ($Fmt) {
-        'mp3'         { $a += "-codec:a libmp3lame -q:a 2 -ar $sampleRate -vn" }
+        'mp3'         { $a += "-codec:a libmp3lame -q:a 2 -ar $mp3Rate -vn" }
         'wav'         { $a += "-codec:a pcm_s24le -ar $sampleRate -vn" }
         'flac'        { $a += "-codec:a flac -compression_level 8 -ar $sampleRate -vn" }
         'aac'         { $a += "-codec:a aac -b:a 192k -ar $sampleRate -vn" }
         'mp4'         { $a += "-codec:v libx264 -crf 23 -preset medium -codec:a aac -b:a 160k -movflags +faststart" }
         'mkv'         { $a += "-codec:v libx264 -crf 23 -preset medium -codec:a copy" }
         'webm'        { $a += "-codec:v libvpx-vp9 -crf 31 -b:v 0 -cpu-used 2 -row-mt 1 -codec:a libopus -b:a 128k" }
-        'extract-mp3' { $a += "-codec:a libmp3lame -q:a 2 -ar $sampleRate -vn" }
+        'extract-mp3' { $a += "-codec:a libmp3lame -q:a 2 -ar $mp3Rate -vn" }
         'extract-wav' { $a += "-codec:a pcm_s16le -ar $sampleRate -vn" }
     }
 
